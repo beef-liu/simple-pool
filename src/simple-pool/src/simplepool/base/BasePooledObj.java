@@ -2,6 +2,8 @@ package simplepool.base;
 
 import simplepool.base.abstracts.IPooledObj;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 public class BasePooledObj<T> implements IPooledObj<T> {
 
 	private volatile T _obj;
@@ -10,6 +12,8 @@ public class BasePooledObj<T> implements IPooledObj<T> {
 	private volatile long _lastBorrowTime;
 	private volatile long _lastReturnTime;
 	private volatile long _lastEvictionTestTime;
+
+	private final AtomicBoolean _returned = new AtomicBoolean(true);
 	
 	public BasePooledObj(T obj) {
 		_createTime = System.currentTimeMillis();
@@ -64,7 +68,17 @@ public class BasePooledObj<T> implements IPooledObj<T> {
 	public void setObject(T obj) {
 		_obj = obj;
 	}
-	
+
+	@Override
+	public boolean isReturned() {
+		return _returned.get();
+	}
+
+	@Override
+	public boolean setReturned(boolean newVal) {
+		return _returned.compareAndSet(!newVal, newVal);
+	}
+
 	@Override
 	public int compareTo(IPooledObj<T> other) {
         final long lastActiveDiff = this.getLastReturnTime() - other.getLastReturnTime();

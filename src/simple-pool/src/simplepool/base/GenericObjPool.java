@@ -8,6 +8,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -29,12 +30,14 @@ public class GenericObjPool<T> implements IObjPool<T> {
     private final IObjFactory<T> _objFactory;
 
     private final AtomicInteger _idleCount = new AtomicInteger(0);
-	private final AtomicInteger _activeCount = new AtomicInteger(0);
+	//private final AtomicInteger _activeCount = new AtomicInteger(0);
+    private final AtomicInteger _totalCount = new AtomicInteger(0);
+
     private final AtomicBoolean _closingFlg = new AtomicBoolean(false);
     private final AtomicBoolean _initFlg = new AtomicBoolean(false);
 
     private final Queue<IPooledObj<T>> _idleQueue = new LinkedTransferQueue<IPooledObj<T>>();
-	private final Map<T, IPooledObj<T>> _allObjMap = new ConcurrentSkipListMap<T, IPooledObj<T>>();
+	private final Map<T, IPooledObj<T>> _allObjMap = new ConcurrentHashMap<T, IPooledObj<T>>();
 	
 	private TestThread _testThread = null;
 
@@ -42,7 +45,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
      *
      * @param poolConfig only several fields are used, they are below:
      *                   maxTotal, maxIdle, minIdle
-     * @param poolFactory
+     * @param objFactory
      */
 	public GenericObjPool(
 			BasePoolConfig poolConfig,
@@ -68,41 +71,53 @@ public class GenericObjPool<T> implements IObjPool<T> {
 	public T borrowObject() {
 		assertNotClosing();
 		
-		IPooledObj<T> t = _idleQueue.poll();
+		IPooledObj<T> t = dequeueOfIdle();
 		if(t == null) {
 			return null;
 		} else {
-			t.setLastBorrowTime(System.currentTimeMillis());
-			
-			_idleCount.decrementAndGet();
-			_activeCount.incrementAndGet();
-			return t.getObject();
+			boolean stateUpdated = t.setReturned(false);
+			if(stateUpdated) {
+                t.setLastBorrowTime(System.currentTimeMillis());
+
+                //_activeCount.incrementAndGet();
+                return t.getObject();
+			} else {
+                System.err.println(_logMsgPrefix
+                        + "Unexpected error occurred. State of object polled from idleQueue is (not returned)"
+                );
+                return null;
+            }
 		}
 	}
 
 	@Override
 	public void returnObject(T obj) {
 		assertNotClosing();
-		
-		//TODO, here need thread lock
+
 		IPooledObj<T> t = _allObjMap.get(obj);
 		if(t != null) {
-			t.setLastReturnTime(System.currentTimeMillis());
-			_idleQueue.add(t);
-			
-			_idleCount.incrementAndGet();
-			_activeCount.decrementAndGet();
+			boolean stateUpdated = t.setReturned(true);
+			if(stateUpdated) {
+                //_activeCount.decrementAndGet();
+
+				t.setLastReturnTime(System.currentTimeMillis());
+
+                enqueueOfIdle(t);
+			}
 		}
 	}
 
 	@Override
 	public void invalidateObject(T obj) {
 		assertNotClosing();
-		
+
+        //remove from allObjMap
 		if(_allObjMap.remove(obj) != null) {
-			_activeCount.decrementAndGet();
+			//_activeCount.decrementAndGet();
+            _totalCount.decrementAndGet();
 		}
-		
+
+        //destroy obj
 		if(obj != null) {
 			try {
 				_objFactory.destroyObject(obj);
@@ -119,7 +134,8 @@ public class GenericObjPool<T> implements IObjPool<T> {
 
 	@Override
 	public int getNumActive() {
-		return _activeCount.get();
+		//return _activeCount.get();
+        return _totalCount.get() - _idleCount.get();
 	}
 
 	@Override
@@ -175,20 +191,45 @@ public class GenericObjPool<T> implements IObjPool<T> {
     	//make objects of initial size
     	for(int i = 0; i < _initialSize; i++) {
     		try {
-        		T obj = _objFactory.makeObject();
-    			
-        		IPooledObj<T> t = makePooledObj(obj);
-        		_allObjMap.put(obj, t);
+                makeOneObj();
     		} catch (Throwable e) {
     			e.printStackTrace();
     		}
     	}
     }
 
+    private void makeOneObj() {
+        T obj = _objFactory.makeObject();
+        IPooledObj<T> t = makePooledObj(obj);
+
+        if(_allObjMap.put(obj, t) == null) {
+            _totalCount.incrementAndGet();
+            enqueueOfIdle(t);
+        } else {
+            System.err.println(_logMsgPrefix
+                    + "Unexpected error occurred. _objFactory.makeObject() should never make new one same as the old one."
+            );
+        }
+    }
+
     private void assertNotClosing() {
         if(_closingFlg.get()) {
             throw new RuntimeException("Pool is closed!");
         }
+    }
+
+    private IPooledObj<T> dequeueOfIdle() {
+        IPooledObj<T> t = _idleQueue.poll();
+        if(t != null) {
+            _idleCount.decrementAndGet();
+        }
+
+        return t;
+    }
+
+    private void enqueueOfIdle(IPooledObj<T> t) {
+        _idleQueue.add(t);
+        _idleCount.incrementAndGet();
     }
 
     private void startObjTestThread() {
@@ -205,25 +246,13 @@ public class GenericObjPool<T> implements IObjPool<T> {
     private IPooledObj<T> makePooledObj(T obj) {
     	return new BasePooledObj<T>(obj);
     }
-    
-    private void directAddToIdle(IPooledObj<T> t) {
-		_idleQueue.add(t);
-		_idleCount.incrementAndGet();
-    }
-    
-    private IPooledObj<T> directPollIdle() {
-    	IPooledObj<T> t = _idleQueue.poll();
-    	if(t != null) {
-        	_idleCount.decrementAndGet();
-    	}
-    	
-    	return t;
-    }
-    
+
     private class TestThread extends Thread {
+        private volatile boolean _stopFlg = false;
     	private final LinkedTransferQueue<IPooledObj<T>> _testQueue = new LinkedTransferQueue<>();
 
     	public void shutdown() {
+            _stopFlg = true;
 			this.interrupt();
     	}
     	
@@ -237,8 +266,12 @@ public class GenericObjPool<T> implements IObjPool<T> {
     		boolean isValid;
     		
     		try {
-        		while(true) {
-        			t = _testQueue.take();
+        		while(!_stopFlg) {
+        			t = _testQueue.poll(_timeBetweenEvictionRunsMillis, TimeUnit.MILLISECONDS);
+                    if(t == null) {
+                        checkIdleObjsForEviction();
+                        continue;
+                    }
         			
         			try {
         				isValid = _objFactory.validateObject(t.getObject());
@@ -258,22 +291,56 @@ public class GenericObjPool<T> implements IObjPool<T> {
         					}
         					if(obj != null) {
         						t.setObject(obj);
-                				directAddToIdle(t);
+
+                                returnToIdle(t);
         					} else {
         						System.err.println(_logMsgPrefix + "null returned by makeObject()");
         					}
         				} else {
-            				directAddToIdle(t);
+                            returnToIdle(t);
         				}
         			} catch (Throwable e) {
         				e.printStackTrace();
         			}
         		}
     		} catch (InterruptedException e) {
-    			//loop broken
-    			_testQueue.clear();
     			System.out.println(_logMsgPrefix + "TestThread loop end. _testQueue is cleared.");
-    		}
+    		} catch (Throwable e) {
+                e.printStackTrace();
+            }
+
+            //test loop end
+            _testQueue.clear();
     	}
+
+        private void returnToIdle(IPooledObj<T> t) {
+            _idleQueue.add(t);
+        }
+
+        private void checkIdleObjsForEviction() {
+            IPooledObj<T> t;
+            while(true) {
+                t = _idleQueue.poll();
+                if(t == null) {
+                    break;
+                }
+
+                if(isNeedEvictionTest(t)) {
+                    _testThread.addObj(t);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        private boolean isNeedEvictionTest(IPooledObj<T> t) {
+            long elapsedTime = System.currentTimeMillis() - t.getLastEvictionTestTime();
+            if(elapsedTime >= _timeBetweenEvictionRunsMillis) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
     }
 }
