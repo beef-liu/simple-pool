@@ -33,34 +33,44 @@ public class TestGenericObjPool {
 
 					@Override
 					public TestResource makeObject() {
-						return new TestResource();
+						TestResource obj = new TestResource();
+						logDebug("makeObject[" + obj + "]");
+						return obj;
 					}
 
 					@Override
 					public void destroyObject(TestResource obj) {
 						obj.release();
+						//logDebug("destroyObject[" + obj + "]");
 					}
 
 					@Override
 					public boolean validateObject(TestResource obj) {
-						return obj.isAlive();
+						boolean valid = obj.isAlive();
+						logDebug("validateObject[" + obj + "]:" + valid);
+						return valid;
 					}
 
 					@Override
 					public void activateObject(TestResource obj) {
+						//logDebug("activateObject[" + obj + "]");
 					}
 
 					@Override
 					public void passivateObject(TestResource obj) {
+						//logDebug("passivateObject[" + obj + "]");
 					}
 				});
 		
 		try {
 			//create test thread
-			ExecutorService threadPool = Executors.newFixedThreadPool(32);
+			final int threadPoolSize = 32;
+			ExecutorService threadPool = Executors.newFixedThreadPool(threadPoolSize);
 			
-			long beginTime = System.currentTimeMillis();
-			long testTime = 30 * 1000L;
+			final long beginTime = System.currentTimeMillis();
+			final long testTime = 30 * 1000L;
+			
+			final int taskCount = 1000;
 			
 			try {
 				while (true) {
@@ -68,10 +78,11 @@ public class TestGenericObjPool {
 						break;
 					}
 					
-					for(int i = 0; i < 10000; i++) {
+					for(int i = 0; i < taskCount; i++) {
 						threadPool.execute(new TestThread(pool));
 					}
 					
+					logDebug("pool NumIdle:" + pool.getNumIdle() + " active:" + pool.getNumActive());
 					Thread.sleep(1000);
 				}
 			} catch (InterruptedException e) {
@@ -79,9 +90,15 @@ public class TestGenericObjPool {
 			}
 			
 			threadPool.shutdown();
-			threadPool.awaitTermination(30 * 1000L, TimeUnit.MILLISECONDS);
 			
+			logDebug("awaitTermination ---------------");
+			threadPool.awaitTermination(60 * 1000L, TimeUnit.MILLISECONDS);
+			
+			logDebug("pool NumIdle:" + pool.getNumIdle() + " active:" + pool.getNumActive());
 			pool.close();
+			logDebug("pool NumIdle:" + pool.getNumIdle() + " active:" + pool.getNumActive());
+		} catch (InterruptedException e) {
+			//loop end
 		} catch (Throwable e) {
 			e.printStackTrace();
 		}
@@ -98,15 +115,17 @@ public class TestGenericObjPool {
 		@Override
 		public void run() {
 			try {
-				for (int i = 0; i < 1000; i++) {
+				for (int i = 0; i < 100; i++) {
 					TestResource resource = _pool.borrowObject();
 					if(resource != null) {
 						try {
 							//pseudo using resource through sleep
-							Thread.sleep(0, 1000);
+							Thread.sleep(0, 100);
 						} finally {
 							_pool.returnObject(resource);
 						}
+					} else {
+						logDebug("Failed to get obj from pool");
 					}
 				}
 			} catch (InterruptedException e) {
@@ -136,7 +155,9 @@ public class TestGenericObjPool {
 	
 	private final static SimpleDateFormat _dateFmtYmdHmsSSS = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
 	private static void logDebug(String msg) {
-		System.out.println(_dateFmtYmdHmsSSS.format(new Date()).concat(" -> ").concat(msg));
+		synchronized (TestGenericObjPool.class) {
+			System.out.println(_dateFmtYmdHmsSSS.format(new Date()).concat(" -> ").concat(msg));
+		}
 	}
 	
 }

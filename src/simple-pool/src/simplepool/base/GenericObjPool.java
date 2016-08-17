@@ -27,7 +27,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
     private final IObjFactory<T> _objFactory;
 
     private final AtomicInteger _idleCount = new AtomicInteger(0);
-	//private final AtomicInteger _activeCount = new AtomicInteger(0);
+	private final AtomicInteger _activeCount = new AtomicInteger(0);
     private final AtomicInteger _totalCount = new AtomicInteger(0);
 
     private final AtomicBoolean _closingFlg = new AtomicBoolean(false);
@@ -94,6 +94,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
                 e.printStackTrace();
             }
 
+            _activeCount.incrementAndGet();
             return t.getObject();
         } else {
             System.err.println(_logMsgPrefix
@@ -120,6 +121,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
                 }
                 
                 enqueueOfIdle(t);
+                _activeCount.decrementAndGet();
 			}
 		}
 	}
@@ -138,8 +140,8 @@ public class GenericObjPool<T> implements IObjPool<T> {
 
 	@Override
 	public int getNumActive() {
-		//return _activeCount.get();
-        return _totalCount.get() - _idleCount.get();
+		return _activeCount.get();
+        //return _totalCount.get() - _idleCount.get();
 	}
 
 	@Override
@@ -180,6 +182,11 @@ public class GenericObjPool<T> implements IObjPool<T> {
         
     	//clear all obj
         _allObjMap.clear();
+        
+        //clear counters
+        _idleCount.set(0);
+        _activeCount.set(0);
+        _totalCount.set(0);
     }
 
     private void initPool() {
@@ -327,7 +334,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
                             } else {
                                 //return valid obj to idle queue
                                 t.setLastEvictionTestTime(System.currentTimeMillis());
-                                _idleQueue.add(t);
+                                enqueueOfIdle(t);
                             }
                         }
         			} catch (Throwable e) {
@@ -335,7 +342,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
         			}
         		}
     		} catch (InterruptedException e) {
-    			System.out.println(_logMsgPrefix + "TestThread loop end. _testQueue is cleared.");
+    			System.out.println(_logMsgPrefix + "EvictionTestThread loop end. _testQueue is cleared.");
     		} catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -345,12 +352,14 @@ public class GenericObjPool<T> implements IObjPool<T> {
     	}
 
         private void checkIdleObjsForEviction() {
+        	System.out.println(_logMsgPrefix + "checkIdleObjsForEviction() ----------");
+        	
             final int evictionMax = (int) (_idleCount.get() * _maxRatioInEviction);
             int evictionAddCount = 0;
 
             IPooledObj<T> t;
             while(true) {
-                t = _idleQueue.poll();
+                t = dequeueOfIdle();
                 if(t == null) {
                     break;
                 }
