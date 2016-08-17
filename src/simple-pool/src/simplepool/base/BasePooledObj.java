@@ -1,8 +1,8 @@
 package simplepool.base;
 
-import simplepool.base.abstracts.IPooledObj;
-
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import simplepool.base.abstracts.IPooledObj;
 
 public class BasePooledObj<T> implements IPooledObj<T> {
 

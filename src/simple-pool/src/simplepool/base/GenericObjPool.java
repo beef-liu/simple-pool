@@ -1,12 +1,9 @@
 package simplepool.base;
 
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -91,7 +88,12 @@ public class GenericObjPool<T> implements IObjPool<T> {
         if(stateUpdated) {
             t.setLastBorrowTime(System.currentTimeMillis());
 
-            //_activeCount.incrementAndGet();
+            try {
+                _objFactory.activateObject(t.getObject());
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
+
             return t.getObject();
         } else {
             System.err.println(_logMsgPrefix
@@ -110,6 +112,13 @@ public class GenericObjPool<T> implements IObjPool<T> {
 			boolean stateUpdated = t.setReturned(true);
 			if(stateUpdated) {
                 t.setLastReturnTime(System.currentTimeMillis());
+
+                try {
+                    _objFactory.passivateObject(t.getObject());
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                }
+                
                 enqueueOfIdle(t);
 			}
 		}
