@@ -235,7 +235,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
 
     private void assertNotClosing() {
         if(_closingFlg.get()) {
-            throw new RuntimeException("Pool is closed!");
+            throw new RuntimeException("Pool is closing!");
         }
     }
 
@@ -276,7 +276,10 @@ public class GenericObjPool<T> implements IObjPool<T> {
 
     	public void shutdown() {
             _stopFlg = true;
+
 			this.interrupt();
+
+            _testQueue.clear();
     	}
     	
     	public void addObj(IPooledObj<T> t) {
@@ -355,10 +358,16 @@ public class GenericObjPool<T> implements IObjPool<T> {
                 }
             }
 
-            //check _minIdle
+            //make up idle queue if < _minIdle
             if(_idleCount.get() < _minIdle) {
-                final int 
+                final int makeupCount = _minIdle - _idleCount.get();
+                if(makeupCount > 0) {
+                    for(int i = 0; i < makeupCount; i++) {
+                        makeNewObjAndAddToIdle();
+                    }
+                }
             }
+
         }
 
         private boolean isNeedEvictionTest(IPooledObj<T> t) {
