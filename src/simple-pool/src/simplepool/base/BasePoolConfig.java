@@ -2,6 +2,8 @@ package simplepool.base;
 
 public class BasePoolConfig {
 
+	private String _poolName;
+
 	private int _maxTotal;
 	
 	private int _maxIdle;
@@ -18,7 +20,15 @@ public class BasePoolConfig {
     
     private long _timeBetweenEvictionRunsMillis = 60 * 1000L;
 
-	public int getMaxTotal() {
+    public String getPoolName() {
+        return _poolName;
+    }
+
+    public void setPoolName(String poolName) {
+        _poolName = poolName;
+    }
+
+    public int getMaxTotal() {
 		return _maxTotal;
 	}
 

@@ -58,7 +58,12 @@ public class GenericObjPool<T> implements IObjPool<T> {
 
         _objFactory = objFactory;
         
-        _logMsgPrefix = GenericObjPool.class.getName() + "[factory:" + objFactory.getClass().getName() + "] ";
+        _logMsgPrefix = GenericObjPool.class.getName() 
+        		+ "["
+        		+ ((poolConfig.getPoolName() == null || poolConfig.getPoolName().length() == 0)? "" : " poolName:" + poolConfig.getPoolName()) 
+        		+ " factory:" + objFactory.getClass().getName() 
+        		+ "] "
+        		;
 
         //init pool
         initPool();

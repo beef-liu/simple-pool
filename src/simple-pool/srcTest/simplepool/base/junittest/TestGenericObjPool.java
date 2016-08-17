@@ -20,6 +20,7 @@ public class TestGenericObjPool {
 	@Test
 	public void test1() {
 		BasePoolConfig poolConfig = new BasePoolConfig();
+		poolConfig.setPoolName("TestGenericObjPool1");
 		poolConfig.setMaxTotal(128);
 		poolConfig.setMaxIdle(64);
 		poolConfig.setMinIdle(16);
