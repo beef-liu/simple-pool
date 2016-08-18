@@ -14,6 +14,14 @@ import simplepool.base.abstracts.IObjPool;
 import simplepool.base.abstracts.IPooledObj;
 
 public class GenericObjPool<T> implements IObjPool<T> {
+	static {
+		System.out.println(
+				GenericObjPool.class.getName() 
+				+ " VERSION:" + "1.0.0" 
+				+ " Date:" + "2016-08-18"
+				);
+	}
+	
 	private final int _maxTotal;
 	private final int _maxIdle;
 	private final int _minIdle;
