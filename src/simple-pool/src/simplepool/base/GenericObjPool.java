@@ -368,8 +368,10 @@ public class GenericObjPool<T> implements IObjPool<T> {
         	System.out.println(_logMsgPrefix + "checkIdleObjsForEviction() ----------");
         	
             final int evictionMax = (int) (_idleCount.get() * _maxRatioInEviction);
+            final long idleTimeMax = _timeBetweenEvictionRunsMillis * 3;
+            final long curTime = System.currentTimeMillis();
+            
             int evictionAddCount = 0;
-
             IPooledObj<T> t;
             while(true) {
                 t = dequeueOfIdle();
@@ -377,6 +379,14 @@ public class GenericObjPool<T> implements IObjPool<T> {
                     break;
                 }
 
+                //check very idle object
+                if(_idleCount.get() > _minIdle
+                		&& (curTime - t.getLastReturnTime()) >= idleTimeMax
+                ) {
+                	removeAndDestroyObj(t.getObject());
+                }
+                
+                //check eviction time
                 if(isNeedEvictionTest(t)) {
                     addObj(t);
 
