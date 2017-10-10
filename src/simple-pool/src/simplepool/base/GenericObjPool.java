@@ -1,6 +1,8 @@
 package simplepool.base;
 
+import java.text.SimpleDateFormat;
 import java.util.Collection;
+import java.util.Date;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -110,9 +112,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
             _activeCount.incrementAndGet();
             return t.getObject();
         } else {
-            System.err.println(_logMsgPrefix
-                    + "Unexpected error occurred. State of object polled from idleQueue is (not returned)"
-            );
+        	logErr("Unexpected error occurred. State of object polled from idleQueue is (not returned)");
             return null;
         }
 	}
@@ -238,9 +238,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
 
             return t;
         } else {
-            System.err.println(_logMsgPrefix
-                    + "Unexpected error occurred. _objFactory.makeObject() should never make new one same as the old one."
-            );
+        	logErr("Unexpected error occurred. _objFactory.makeObject() should never make new one same as the old one.");
             return null;
         }
     }
@@ -355,7 +353,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
         			}
         		}
     		} catch (InterruptedException e) {
-    			System.out.println(_logMsgPrefix + "EvictionTestThread loop end. _testQueue is cleared.");
+    			logDebug("EvictionTestThread loop end. _testQueue is cleared.");
     		} catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -365,7 +363,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
     	}
 
         private void checkIdleObjsForEviction() {
-        	System.out.println(_logMsgPrefix + "checkIdleObjsForEviction() ----------");
+        	//logDebug("checkIdleObjsForEviction() ----------");
         	
             final int evictionMax = (int) (_idleCount.get() * _maxRatioInEviction);
             final long idleTimeMax = _timeBetweenEvictionRunsMillis * 3;
@@ -421,4 +419,22 @@ public class GenericObjPool<T> implements IObjPool<T> {
         }
 
     }
+    
+    private void logDebug(String msg) {
+        System.err.println(
+        		(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss,SSS")).format(new Date()) + " DEBUG "
+        		+ _logMsgPrefix
+        		+ msg
+        );
+    }
+    
+    private void logErr(String msg) {
+        System.err.println(
+        		(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss,SSS")).format(new Date()) + " ERROR "
+        		+ _logMsgPrefix
+        		+ msg
+        );
+    }
+    
+    
 }
