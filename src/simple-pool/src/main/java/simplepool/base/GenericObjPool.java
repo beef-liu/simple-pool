@@ -299,7 +299,7 @@ public class GenericObjPool<T> implements IObjPool<T> {
         private final float _maxRatioInEviction = 0.25f;
 
         private volatile boolean _stopFlg = false;
-    	private final LinkedTransferQueue<IPooledObj<T>> _testQueue = new LinkedTransferQueue<>();
+    	private final LinkedTransferQueue<IPooledObj<T>> _testQueue = new LinkedTransferQueue<IPooledObj<T>>();
 
     	public void shutdown() {
             _stopFlg = true;
